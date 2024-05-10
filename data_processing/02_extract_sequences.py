@@ -6,7 +6,7 @@ import h5py
 import pandas as pd
 from tqdm import tqdm
 
-from settings import END_DATE, START_DATE
+from settings import END_DATE, START_DATE, MAX_WORKERS
 from worker_funcs import worker
 
 
@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
     date_range = pd.date_range(start=START_DATE, end=END_DATE, freq="D")
     csv_path = os.path.join(args.radar_directory, "hdf_metadata.csv")
-    ouput_dir = os.path.join(args.radar_directory, "hdf_archives")
+    ouput_dir = os.path.join(args.radar_directory, "data") # change from "hdf_archives"
     date_descriptions_path = os.path.join(
         args.radar_directory, "daily_weather_report_tags.csv"
     )
@@ -52,31 +52,31 @@ if __name__ == "__main__":
     for _, row in date_descriptions.iterrows():
         date_tags[row.date_iso] = row.tags
 
-    with h5py.File(
-        os.path.join(ouput_dir, "all_data.hdf5"), "w", libver="latest"
-    ) as hdf_archive:
-        with ProcessPoolExecutor() as executor:
-            worker_args = [
-                (day, args.radar_directory, date_tags[str(day.date())],)
-                for day in date_range
-            ]
-            with tqdm(total=len(worker_args)) as pbar:
-                for metadata_list in executor.map(worker, worker_args):
-                    if metadata_list:
-                        for idx, metadata_dict in enumerate(metadata_list):
-                            metadata.loc[run_n] = metadata_dict
-                            hdf_archive[str(run_n)] = h5py.ExternalLink(
-                                os.path.join(
-                                    ouput_dir,
-                                    metadata_dict["start_datetime"].strftime(
-                                        "%Y%m%d.hdf5"
-                                    ),
-                                ),
-                                str(idx),
-                            )
-                            run_n += 1
-                            hdf_archive.flush()
-                    pbar.update(1)
+    # with h5py.File(
+    #     os.path.join(ouput_dir, "all_data.hdf5"), "w", libver="latest"
+    # ) as hdf_archive:
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        worker_args = [
+            (day, args.radar_directory, ouput_dir, date_tags[str(day.date())],)
+            for day in date_range
+        ]
+        with tqdm(total=len(worker_args)) as pbar:
+            for metadata_list in executor.map(worker, worker_args):
+                if metadata_list:
+                    for idx, metadata_dict in enumerate(metadata_list):
+                        metadata.loc[run_n] = metadata_dict
+                        # hdf_archive[str(run_n)] = h5py.ExternalLink(
+                        #     os.path.join(
+                        #         ouput_dir,
+                        #         metadata_dict["start_datetime"].strftime(
+                        #             "%Y%m%d.hdf5"
+                        #         ),
+                        #     ),
+                        #     str(idx),
+                        # )
+                        run_n += 1
+                        # hdf_archive.flush()
+                pbar.update(1)
 
     metadata.to_csv(csv_path, index_label="id")
     print(metadata)
