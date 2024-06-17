@@ -55,7 +55,7 @@ if __name__ == "__main__":
     with h5py.File(
         os.path.join(ouput_dir, "all_data.hdf5"), "w", libver="latest"
     ) as hdf_archive:
-        with ProcessPoolExecutor() as executor:
+        with ProcessPoolExecutor(max_workers=16) as executor:
             worker_args = [
                 (day, args.radar_directory, date_tags[str(day.date())],)
                 for day in date_range
